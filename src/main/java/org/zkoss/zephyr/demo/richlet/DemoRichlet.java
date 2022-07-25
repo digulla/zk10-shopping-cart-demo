@@ -12,6 +12,7 @@ Copyright (C) 2022 Potix Corporation. All Rights Reserved.
 package org.zkoss.zephyr.demo.richlet;
 
 import static java.util.Arrays.asList;
+// +1 You already provide a lot of constants to navigate the tree
 import static org.zkoss.zephyr.action.ActionTarget.NEXT_SIBLING;
 import static org.zkoss.zephyr.action.ActionTarget.PARENT;
 import static org.zkoss.zephyr.action.ActionTarget.SELF;
@@ -80,7 +81,11 @@ public class DemoRichlet implements StatelessRichlet {
 		final String orderId = Helper.nextUuid();
 		return IVlayout.of(
 			ILabel.of("Shopping bag").withSclass("title"),
-			IGrid.ofId("shoppingBag").withHflex("1")
+			// Even though this is just a demo, please use string constants for everything that is related.
+			// This makes it much easier to follow the semantics of the code.
+			// I'd also argue for an ID type (class) instead of using String.
+			IGrid.ofId("shoppingBag")
+				.withHflex("1")
 				.withEmptyMessage("please add items.")
 				.withColumns(SHOPPING_BAG_COLUMN_TEMPLATE)
 				.withRows(intShoppingBagItems(orderId)),
@@ -89,7 +94,10 @@ public class DemoRichlet implements StatelessRichlet {
 	}
 
 	private IRows intShoppingBagItems(String orderId) {
-		return IRows.ofId("shoppingBagRows").withChildren(initShoppingBagItem(orderId));
+		// #1: I really like the fluent API. Can we have this for the old widgets as well?
+		// #2: Please use consistent formatting (only one method call per line)
+		return IRows.ofId("shoppingBagRows")
+			.withChildren(initShoppingBagItem(orderId));
 	}
 
 	private IRow initShoppingBagItem(String orderId) {
@@ -99,20 +107,25 @@ public class DemoRichlet implements StatelessRichlet {
 		return IRow.of(
 			initProductList(),
 			initProductSize(),
-			ISpinner.of(initQuantity).withInstant(true)
+			ISpinner.of(initQuantity)
+				.withInstant(true)
 				.withAction(this::doQuantityChange),
 			ILabel.of(String.valueOf(initPrice)),
 			ILabel.of(String.valueOf(initPrice)),
-			IButton.of("delete").withAction(this::doDelete)
+			// withId() instead of "of()"? 
+			IButton.of("delete")
+				.withAction(this::doDelete)
 		).withId(uuid(orderId, uuid));
 	}
 
 	private IDiv initOrderButtons(String orderId) {
 		return IDiv.of(
-			IButton.of("add item +").withAction(this::addItem)
+			IButton.of("add item +")
+				.withAction(this::addItem)
 				.withSclass("add-items")
 				.withId(uuid(orderId, "add")),
-			IButton.of("submit order").withAction(this::doSubmit)
+			IButton.of("submit order")
+				.withAction(this::doSubmit)
 				.withSclass("submit")
 				.withId(uuid(orderId, "submit")));
 	}
@@ -134,13 +147,25 @@ public class DemoRichlet implements StatelessRichlet {
 	}
 
 	@Action(type = Events.ON_CLICK)
+	// field = "id" seems to be kind of the default?
+	// Also, how about bunch of constants for all fields, ideally in the class which contains the field to avoid typos?
+	// Lastly, why is this public? It's called as lambda, right?
 	public void addItem(@ActionVariable(targetId = SELF, field = "id") String uuid) {
-		UiAgent.getCurrent().appendChild(Locator.ofId("shoppingBagRows"),
+		// I never liked the many static methods which ZK uses. Unless you have an UiAgent for tests, this
+		// code makes testing impossible. How about supporting UiAgent as parameter which is automatically
+		// wired to the correct instance by the event handling code?
+		UiAgent.getCurrent().appendChild(
+				// Same here: I would prefer to add a parameter which allows to manipulate the UI element "shoppingBagRows"
+				// on which I can call appendChild(). That way, it will be more obvious what UI elements an action
+				// will touch. Plus tests can verify that the correct changes happen.
+				Locator.ofId("shoppingBagRows"),
 				initShoppingBagItem(parseOrderId(uuid)));
 		log("add item");
 	}
 
 	@Action(type = Events.ON_CLICK)
+	// Are you using the HTML element ID to store the database ID?
+	// I understand this is just a demo but how about data-id?
 	public void doDelete(Self self, @ActionVariable(targetId = PARENT, field = "id") String uuid) {
 		orderService.delete(parseItemId(uuid));
 		UiAgent.getCurrent().remove(self.closest(IRow.class));
@@ -171,6 +196,13 @@ public class DemoRichlet implements StatelessRichlet {
 	@Action(type = Events.ON_CHANGE)
 	public void doItemChange(InputData data, Self self,
 			@ActionVariable(targetId = PARENT, field = "id") String uuid,
+			// This code is very brittle when someone changes the UI. Imagine someone adds another element between those two.
+			// It's very hard to see all the places which you would need to fix. I forsee a lot of grief because of this.
+			// I'd prefer a solution where a "ui structure helper" is used in the fluent API
+			// to remember the structure using names or IDs.
+			// Given two names, the helper would return the relative path between the two.
+			// At the very least, it must be possible to write unit tests that complain when these relative paths break.
+			// For example, developers must be able to create a constant for every path and verify it against the result of the fluent API.
 			@ActionVariable(targetId = NEXT_SIBLING + NEXT_SIBLING) int quantity) {
 		String productName = data.getValue();
 		int price = Item.PRODUCT_TABLE.get(productName).getPrice();
@@ -183,9 +215,13 @@ public class DemoRichlet implements StatelessRichlet {
 	}
 
 	@Action(type = Events.ON_CHANGE)
-	public void doQuantityChange(Self self,
-			InputData data, @ActionVariable(targetId = NEXT_SIBLING) Integer price,
-			@ActionVariable(targetId = PARENT, field = "id") String uuid) {
+	public void doQuantityChange(
+		// How about this style for indenting? One parameter per line and the ") {" is on a new line.
+		Self self,
+		InputData data,
+		@ActionVariable(targetId = NEXT_SIBLING) Integer price,
+		@ActionVariable(targetId = PARENT, field = "id") String uuid
+	) {
 		Integer quantity = Integer.valueOf(data.getValue());
 		orderService.updateQuantity(parseItemId(uuid), quantity, price);
 		UiAgent.getCurrent().smartUpdate(
